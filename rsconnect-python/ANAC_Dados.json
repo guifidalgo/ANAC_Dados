@@ -1,0 +1,12 @@
+{
+    "https://api.shinyapps.io": {
+        "server_url": "https://api.shinyapps.io",
+        "filename": "/Users/guilhermefidalgo/Documents/Portfolio/ANAC_Dados",
+        "app_url": "https://guilherme-fidalgo.shinyapps.io/anac-dados-estatisticos/",
+        "app_id": "15545992",
+        "app_guid": null,
+        "title": "ANAC-Dados-Estatisticos",
+        "app_mode": "python-shiny",
+        "app_store_version": 1
+    }
+}
