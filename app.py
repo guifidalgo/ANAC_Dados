@@ -10,12 +10,17 @@ import os
 
 logo_path = os.path.join(os.path.dirname(__file__), 'assets', 'vlls_logo.png')
 
-file_path = os.path.join(os.path.dirname(__file__), 'notebooks', 'anac_dados_estatisticos.csv')
+file_operacional_path = os.path.join(os.path.dirname(__file__), 'data', 'anac_dados_estatisticos.csv')
+file_financeiro_path = os.path.join(os.path.dirname(__file__), 'data', 'demonstrativos.csv')
 
-df = pd.read_csv(file_path)
-df['dt_referencia'] = pd.to_datetime(df['dt_referencia'], format='%Y-%m-%d').dt.date
-date_min = df['dt_referencia'].min()
-date_max = df['dt_referencia'].max()
+df_operacional = pd.read_csv(file_operacional_path)
+df_operacional['dt_referencia'] = pd.to_datetime(df_operacional['dt_referencia'], format='%Y-%m-%d').dt.date
+date_min = df_operacional['dt_referencia'].min()
+date_max = df_operacional['dt_referencia'].max()
+
+df_financeiro = pd.read_csv(file_financeiro_path)
+periodo_fin = df_financeiro['periodo'].sort_values(ascending=False).unique().tolist()
+empresas_fin = df_financeiro['empresa'].sort_values().unique().tolist()
 
 color_mapping = {
     'AZU': '#53B2E5',
@@ -59,7 +64,7 @@ kpis_operacionais = ui.layout_sidebar(
         ui.input_selectize(
             "select_nacionalidade",
             "Nacionalidade Empresa",
-            choices=df['EMPRESA (NACIONALIDADE)'].sort_values().unique().tolist(),
+            choices=df_operacional['EMPRESA (NACIONALIDADE)'].sort_values().unique().tolist(),
             selected="BRASILEIRA",
             multiple=True,
         ),
@@ -107,7 +112,7 @@ kpis_operacionais = ui.layout_sidebar(
         ),
         ui.card(
             ui.card_header("RPK, ASK e Load Factor"),
-            ui.card_body(output_widget("plot_rpk_ask_loadfactor"))
+            ui.card_body(output_widget("plot_rpk_ask_loadf_operacionalactor"))
         ),
         ui.card(
             ui.card_header("Passageiros"),
@@ -122,12 +127,76 @@ kpis_operacionais = ui.layout_sidebar(
             ui.card_body(output_widget("plot_destinos"))
         ),
         col_widths=[2, 2, 2, 2, 2, 2, 12, 4, 4, 4],
-        # gap="md",
         align="center",
 
     )
 )
 
+kpis_financeiros = ui.layout_sidebar(
+    ui.sidebar(
+        ui.h2("Indicadores Financeiros"),
+        ui.input_selectize(
+            "select_periodo_fin",
+            "Período",
+            choices=periodo_fin,
+            selected=periodo_fin[0],
+            multiple=False,
+        ),
+        ui.input_selectize(
+            "select_empresa_fin",
+            "Empresa",
+            choices=empresas_fin,
+            selected=empresas_fin,
+            multiple=True,
+        ),
+        bg="#f8f8f8",
+        open="always",
+        fillable=True,
+    ),
+    ui.layout_columns(
+        ui.value_box(
+            "Receita Operacional Líquida",
+            ui.output_text("kpi_receita_operacional"),
+            fill=False
+        ),
+        ui.value_box(
+            "Custo do Serviços Prestados",
+            ui.output_text("kpi_custo_servicos"),
+            fill=False
+        ),
+        ui.value_box(
+            "Lucro Bruto",
+            ui.output_text("kpi_lucro_bruto"),
+            fill=False
+        ),
+        ui.value_box(
+            "Resultado Líquido",
+            ui.output_text("kpi_resultado_liquido"),
+            fill=False
+        ),
+        ui.card(
+            ui.card_header(
+                ui.input_selectize(
+                    "select_conta_fin",
+                    "",
+                    choices=[
+                        '(=) Receita Operacional Líquida',
+                        '(-) Custos dos Serviços Prestados',
+                        '(=) Lucro Bruto',
+                        '(=) Resultado Líquido do Período'
+                    ],
+                    selected='(=) Receita Operacional Líquida',
+                    multiple=False,
+                    width="100%"
+                )
+            ),
+            ui.card_body(output_widget("plot_financeiro")),
+        ),
+        col_widths=[3, 3, 3, 3, 12],
+        align="center",
+    )
+
+)
 
 app_ui = ui.page_fluid(
     ui.page_navbar(
@@ -138,8 +207,11 @@ app_ui = ui.page_fluid(
             ),
         ),
         ui.nav_panel(
-            "About",
+            "Indicadores Financeiros",
+            ui.card(
+                kpis_financeiros
             ),
+        ),
         title=ui.output_image("logo", height="60px"),
     ),
     title="Dashboard ANAC - Dados Estatísticos",
@@ -149,7 +221,7 @@ def server(input, output, session):
     @reactive.effect
     def update_empresa_choices():
         nacionalidades = input.select_nacionalidade()
-        empresas = df[df['EMPRESA (NACIONALIDADE)'].isin(nacionalidades)]['EMPRESA (SIGLA)'].sort_values().unique().tolist()
+        empresas = df_operacional[df_operacional['EMPRESA (NACIONALIDADE)'].isin(nacionalidades)]['EMPRESA (SIGLA)'].sort_values().unique().tolist()
         empresas_default = ['AZU', 'GLO', 'TAM']
         return ui.update_selectize(
             "select_empresa",
@@ -158,18 +230,26 @@ def server(input, output, session):
             )
     
     @reactive.calc
-    def filtered_data():
+    def filtered_data_operacional():
         date_range = input.select_date_kpis()
         empresas = input.select_empresa()
         # if not date_range or not empresas:
         #     return pd.DataFrame()  # Return empty DataFrame if no date range or companies selected
         start_date, end_date = date_range
         mask = (
-            (df['dt_referencia'] >= start_date) &
-            (df['dt_referencia'] <= end_date) &
-            (df['EMPRESA (SIGLA)'].isin(empresas))
+            (df_operacional['dt_referencia'] >= start_date) &
+            (df_operacional['dt_referencia'] <= end_date) &
+            (df_operacional['EMPRESA (SIGLA)'].isin(empresas))
         )
-        return df.loc[mask]
+        return df_operacional.loc[mask]
+    
+    @reactive.calc
+    def filtered_data_financeiro():
+        empresas = input.select_empresa_fin()
+        mask = (
+            (df_financeiro['empresa'].isin(empresas))
+        )
+        return df_financeiro.loc[mask]
 
 
     @render.image
@@ -179,19 +259,19 @@ def server(input, output, session):
 
     @render.text
     def kpi_ask():
-        df = filtered_data()
-        return format_number(df['ASK'].sum())
+        df_operacional = filtered_data_operacional()
+        return format_number(df_operacional['ASK'].sum())
     
     @render.text
     def kpi_rpk():
-        df = filtered_data()
-        return format_number(df['RPK'].sum())
+        df_operacional = filtered_data_operacional()
+        return format_number(df_operacional['RPK'].sum())
     
     @render.text
     def kpi_load_factor():
-        df = filtered_data()
-        total_rpk = df['RPK'].sum()
-        total_ask = df['ASK'].sum()
+        df_operacional = filtered_data_operacional()
+        total_rpk = df_operacional['RPK'].sum()
+        total_ask = df_operacional['ASK'].sum()
         if total_ask == 0:
             return "0%"
         load_factor = (total_rpk / total_ask) * 100
@@ -199,26 +279,25 @@ def server(input, output, session):
 
     @render.text
     def kpi_passageiros():
-        df = filtered_data()
-        passageiros_pagos = df['PASSAGEIROS PAGOS'].sum()
-        passageiros_gratuitos = df['PASSAGEIROS GRÁTIS'].sum()
+        df_operacional = filtered_data_operacional()
+        passageiros_pagos = df_operacional['PASSAGEIROS PAGOS'].sum()
+        passageiros_gratuitos = df_operacional['PASSAGEIROS GRÁTIS'].sum()
         return format_number(passageiros_pagos + passageiros_gratuitos)
 
     @render.text
     def kpi_decolagens():
-        df = filtered_data()
-        return format_number(df['DECOLAGENS'].sum())
+        df_operacional = filtered_data_operacional()
+        return format_number(df_operacional['DECOLAGENS'].sum())
     
     @render.text
     def kpi_destinos():
-        df = filtered_data()
-        return format_number(df['AEROPORTO DE DESTINO (SIGLA)'].nunique())
-
+        df_operacional = filtered_data_operacional()
+        return format_number(df_operacional['AEROPORTO DE DESTINO (SIGLA)'].nunique())
 
     @render_widget
-    def plot_rpk_ask_loadfactor():
-        df = filtered_data()
-        grouped = df.groupby('dt_referencia').agg({'RPK': 'sum', 'ASK': 'sum'}).reset_index()
+    def plot_rpk_ask_loadf_operacionalactor():
+        df_operacional = filtered_data_operacional()
+        grouped = df_operacional.groupby('dt_referencia').agg({'RPK': 'sum', 'ASK': 'sum'}).reset_index()
         grouped['Load Factor'] = (grouped['RPK'] / grouped['ASK']) * 100
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         fig.add_trace(
@@ -305,9 +384,9 @@ def server(input, output, session):
     
     @render_widget
     def plot_passageiros():
-        df = filtered_data()
-        df['quarter'] = pd.to_datetime(df['dt_referencia']).dt.to_period('Q')
-        grouped = df.groupby(['EMPRESA (SIGLA)','quarter']).agg({'PASSAGEIROS PAGOS': 'sum', 'PASSAGEIROS GRÁTIS': 'sum'}).reset_index()
+        df_operacional = filtered_data_operacional()
+        df_operacional['quarter'] = pd.to_datetime(df_operacional['dt_referencia']).dt.to_period('Q')
+        grouped = df_operacional.groupby(['EMPRESA (SIGLA)','quarter']).agg({'PASSAGEIROS PAGOS': 'sum', 'PASSAGEIROS GRÁTIS': 'sum'}).reset_index()
         grouped['Total Passageiros'] = grouped['PASSAGEIROS PAGOS'] + grouped['PASSAGEIROS GRÁTIS']
         fig = go.Figure()
         for empresa in grouped['EMPRESA (SIGLA)'].unique():
@@ -345,9 +424,9 @@ def server(input, output, session):
     
     @render_widget
     def plot_decolagens():
-        df = filtered_data()
-        df['quarter'] = pd.to_datetime(df['dt_referencia']).dt.to_period('Q')
-        grouped = df.groupby(['EMPRESA (SIGLA)','quarter']).agg({'DECOLAGENS': 'sum'}).reset_index()
+        df_operacional = filtered_data_operacional()
+        df_operacional['quarter'] = pd.to_datetime(df_operacional['dt_referencia']).dt.to_period('Q')
+        grouped = df_operacional.groupby(['EMPRESA (SIGLA)','quarter']).agg({'DECOLAGENS': 'sum'}).reset_index()
         fig = go.Figure()
         for empresa in grouped['EMPRESA (SIGLA)'].unique():
             empresa_data = grouped[grouped['EMPRESA (SIGLA)'] == empresa]
@@ -384,9 +463,9 @@ def server(input, output, session):
     
     @render_widget
     def plot_destinos():
-        df = filtered_data()
-        df['quarter'] = pd.to_datetime(df['dt_referencia']).dt.to_period('Q')
-        grouped = df.groupby(['EMPRESA (SIGLA)','quarter']).agg({'AEROPORTO DE DESTINO (SIGLA)': 'nunique'}).reset_index()
+        df_operacional = filtered_data_operacional()
+        df_operacional['quarter'] = pd.to_datetime(df_operacional['dt_referencia']).dt.to_period('Q')
+        grouped = df_operacional.groupby(['EMPRESA (SIGLA)','quarter']).agg({'AEROPORTO DE DESTINO (SIGLA)': 'nunique'}).reset_index()
         fig = go.Figure()
         for empresa in grouped['EMPRESA (SIGLA)'].unique():
             empresa_data = grouped[grouped['EMPRESA (SIGLA)'] == empresa]
@@ -421,5 +500,97 @@ def server(input, output, session):
         )
         return fig
 
+    @render.text
+    def kpi_receita_operacional():
+        df_financeiro = filtered_data_financeiro()
+        periodo = input.select_periodo_fin()
+        df_financeiro = df_financeiro[
+            (df_financeiro['periodo'] == periodo) &
+            (df_financeiro['tipo_saldo'] == 'saldo_inicio_periodo') &
+            (df_financeiro['descricao_conta'] == '(=) Receita Operacional Líquida')
+            ]
+        valor = df_financeiro['valor_saldo'].sum()
+        return format_number(valor)
+    
+    @render.text
+    def kpi_custo_servicos():
+        df_financeiro = filtered_data_financeiro()
+        periodo = input.select_periodo_fin()
+        df_financeiro = df_financeiro[
+            (df_financeiro['periodo'] == periodo) &
+            (df_financeiro['tipo_saldo'] == 'saldo_inicio_periodo') &
+            (df_financeiro['descricao_conta'] == '(-) Custos dos Serviços Prestados')
+            ]
+        valor = -df_financeiro['valor_saldo'].sum()
+        return format_number(valor)
+    
+    @render.text
+    def kpi_lucro_bruto():
+        df_financeiro = filtered_data_financeiro()
+        periodo = input.select_periodo_fin()
+        df_financeiro = df_financeiro[
+            (df_financeiro['periodo'] == periodo) &
+            (df_financeiro['tipo_saldo'] == 'saldo_inicio_periodo') &
+            (df_financeiro['descricao_conta'] == '(=) Lucro Bruto')
+            ]
+        valor = df_financeiro['valor_saldo'].sum()
+        return format_number(valor)
+    
+    @render.text
+    def kpi_resultado_liquido():
+        df_financeiro = filtered_data_financeiro()
+        periodo = input.select_periodo_fin()
+        df_financeiro = df_financeiro[
+            (df_financeiro['periodo'] == periodo) &
+            (df_financeiro['tipo_saldo'] == 'saldo_inicio_periodo') &
+            (df_financeiro['descricao_conta'] == '(=) Resultado Líquido do Período')
+            ]
+        valor = df_financeiro['valor_saldo'].sum()
+        return format_number(valor)
+    
+    @render_widget
+    def plot_financeiro():
+        df_financeiro = filtered_data_financeiro()
+        conta = input.select_conta_fin()
+        df_financeiro = df_financeiro[
+            (df_financeiro['tipo_saldo'] == 'saldo_inicio_periodo') &
+            (df_financeiro['descricao_conta'] == conta)
+            ]
+        if conta == "(-) Custos dos Serviços Prestados":
+            df_financeiro['valor_saldo'] = -df_financeiro['valor_saldo']
+        
+        df_financeiro = df_financeiro.sort_values(by=['periodo'])
+        fig = go.Figure()
+        for empresa in df_financeiro['empresa'].sort_values().unique():
+            empresa_data = df_financeiro[df_financeiro['empresa'] == empresa]
+            fig.add_trace(
+                go.Bar(
+                    x=empresa_data['periodo'],
+                    y=empresa_data['valor_saldo'],
+                    name=f'{empresa}',
+                    marker_color=color_mapping.get(empresa, '#f8f8f8'),
+                    text=empresa_data['valor_saldo'].apply(lambda x: format_number(x)),
+                    textangle=-90,
+                    textposition='inside',
+                    textfont=dict(color='white', size=12),
+                    hovertext=[f"{format_number(val)}" for val in empresa_data['valor_saldo']],
+                    hoverinfo='text+name',
+                )
+            )
+        # Configurar layout para melhor visualização dos rótulos
+        fig.update_layout(
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            hovermode='x unified',
+            margin=dict(t=50, b=50, l=50, r=50),
+            plot_bgcolor='rgba(0,0,0,0)',  # Remove cor de fundo do gráfico
+            paper_bgcolor='rgba(0,0,0,0)',  # Remove cor de fundo do papel
+        )
+        
+        # Remover completamente o menu de opções do Plotly
+        fig.update_layout(
+            modebar={'remove': ['pan2d', 'select2d', 'lasso2d', 'resetScale2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'zoom2d', 'toImage', 'downloadPlot']}
+        )
+        return fig
 
 app = App(app_ui, server)
