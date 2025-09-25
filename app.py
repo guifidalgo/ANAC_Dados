@@ -366,6 +366,11 @@ def server(input, output, session):
         )
         
         # Configurar eixos
+        fig.update_xaxes(
+            dtick="M1",
+            tickformat="%b\n%Y",
+        )
+
         fig.update_yaxes(
             title_text="RPK / ASK",
             secondary_y=False,
@@ -406,6 +411,10 @@ def server(input, output, session):
                 )
             )
 
+        fig.update_xaxes(
+            tickangle=-45,
+        )
+
         # Configurar layout para melhor visualização dos rótulos
         fig.update_layout(
             showlegend=True,
@@ -444,7 +453,9 @@ def server(input, output, session):
                     hoverinfo='text+name',
                 )
             )
-
+        fig.update_xaxes(
+            tickangle=-45,
+        )
         # Configurar layout para melhor visualização dos rótulos
         fig.update_layout(
             showlegend=True,
@@ -483,7 +494,9 @@ def server(input, output, session):
                     hoverinfo='text+name',
                 )
             )
-
+        fig.update_xaxes(
+            tickangle=-45,
+        )
         # Configurar layout para melhor visualização dos rótulos
         fig.update_layout(
             showlegend=True,
